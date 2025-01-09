@@ -106,4 +106,69 @@ router.get("/aggregate/average-ratings", async (req, res) => {
     }
 })
 
+const initDb = async (req, res, next) => {
+    try {
+        // 1. Najpierw wyczyszczamy kolekcję:
+        await Movie.deleteMany();
+
+        // 2. Budujemy ścieżkę do dużego pliku JSON (zawierającego tablicę filmów):
+        //    Upewnij się, że plik faktycznie istnieje w podanej lokalizacji.
+        //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! - teraz przestawiam na wygenerwoane
+        // const filePath = path.join(__dirname, '..', 'data', 'data.json');
+        const filePath = path.join(__dirname, '..', 'data', 'generated.json');
+
+        // 3. Tworzymy strumień odczytu z pliku i parser JSONStream,
+        //    który będzie przetwarzał każdy element tablicy osobno.
+        const readStream = fs.createReadStream(filePath, { encoding: 'utf8' });
+        const parser = JSONStream.parse(''); // '' = każdy element tablicy w pliku
+
+        // 4. Przygotowujemy zmienne do batchowania:
+        let docsBatch = [];
+        const BATCH_SIZE = 500; // np. co 500 dokumentów zapisuj do bazy
+        let insertedCount = 0;
+
+        // 5. Nasłuchujemy zdarzenia "data" — za każdym razem, gdy JSONStream odczyta kolejny obiekt:
+        parser.on('data', async (doc) => {
+            // Dodaj obiekt do paczki:
+            docsBatch.push(doc);
+
+            // Jeśli paczka osiągnęła BATCH_SIZE, wstawiamy ją do Mongo i resetujemy.
+            if (docsBatch.length >= BATCH_SIZE) {
+                // Wstrzymujemy parser, żeby nie nadchodziły kolejne obiekty w trakcie zapisu:
+                parser.pause();
+                await Movie.insertMany(docsBatch);
+                insertedCount += docsBatch.length;
+                docsBatch = [];
+                // Wznawiamy wczytywanie:
+                parser.resume();
+            }
+        });
+
+        // 6. Zdarzenie "end" nastąpi, gdy parser przerobi cały plik:
+        parser.on('end', async () => {
+            // Wstawiamy ostatnią paczkę, jeśli coś w niej zostało:
+            if (docsBatch.length) {
+                await Movie.insertMany(docsBatch);
+                insertedCount += docsBatch.length;
+            }
+            // Zwracamy odpowiedź JSON:
+            return res.json({
+                message: 'Movies DB inited successfully (streaming)',
+                insertedCount
+            });
+        });
+
+        // 7. Obsługa błędów parsera — wywołujemy next(err), żeby nasz globalny errorHandler je przechwycił.
+        parser.on('error', (err) => {
+            next(err);
+        });
+
+        // 8. Łączymy strumień z parserem — to rozpoczyna proces wczytywania i przetwarzania danych.
+        readStream.pipe(parser);
+
+    } catch (err) {
+        next(err);
+    }
+}
+
 module.exports = router

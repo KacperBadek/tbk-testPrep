@@ -6,6 +6,12 @@ const errorHandler = require("../error-handling/errorHandler");
 const notFoundHandler = require('../error-handling/notFoundHandler');
 const movieRouter = require('../routes/movies');
 
+// npm init -y
+// npm create vite@latest client --template react
+// npm install express;
+// npm install mongoose;
+// npm install cors;
+
 const corsOptions = {
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
@@ -13,7 +19,7 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-mongoose.connect('mongodb://localhost:27017/mydatabase', {
+mongoose.connect('mongodb://root:example@localhost:27020/mongo_db_test?authSource=admin', {
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
